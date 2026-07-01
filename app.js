@@ -8,6 +8,7 @@ const state = {
   variables: {},
   checks: {},
   appClickBound: false,
+  previewNoteId: "",
 };
 
 const phases = ["Reconnaissance", "Enumeration", "Exploitation", "Post-Exploitation", "Persistence", "Reporting"];
@@ -57,6 +58,7 @@ function route() {
 }
 
 function shell(content) {
+  const previewHref = state.previewNoteId ? `#/preview/${encodeURIComponent(state.previewNoteId)}` : "#/preview";
   return `
     <div class="shell">
       <header class="topbar">
@@ -66,7 +68,7 @@ function shell(content) {
         </nav>
         <div class="top-actions">
           <label class="search">${icons.search}<input id="global-search" type="search" placeholder="Search" value="${escapeAttr(state.search)}" /></label>
-          <a class="icon-button" href="#/preview" title="Markdown preview">${icons.book}</a>
+          <a class="icon-button" href="${previewHref}" title="Markdown preview">${icons.book}</a>
         </div>
       </header>
       ${content}
@@ -79,7 +81,7 @@ async function render() {
   if (current.view === "note" && current.id) {
     await renderNote(current.id);
   } else if (current.view === "preview") {
-    renderPreview();
+    await renderPreview(current.id);
   } else {
     syncCategoryFromRoute(current.id);
     renderCategory();
@@ -209,6 +211,7 @@ async function renderNote(id) {
     return;
   }
   state.category = note.category;
+  state.previewNoteId = note.id;
   const markdown = await fetchText(note.file);
   const checks = state.checks[id] || new Set();
   const variableKeys = collectVariables(note);
@@ -315,8 +318,10 @@ function renderNext(note) {
   }).join("");
 }
 
-function renderPreview() {
-  const sample = `# New Note Title
+async function renderPreview(id) {
+  const fallbackNoteId = "web-authentication-testing";
+  const exampleNote = state.data.notes.find((note) => note.id === id) || state.data.notes.find((note) => note.id === fallbackNoteId);
+  const sample = exampleNote ? await fetchText(exampleNote.file) : `# New Note Title
 
 ## Overview
 Explain when this technique is useful and what evidence it creates.
@@ -330,6 +335,9 @@ Explain when this technique is useful and what evidence it creates.
 nmap -sV -sC <TARGET_IP> -oA scans/<HOSTNAME>
 \`\`\`
 `;
+  const exampleTitle = exampleNote?.title || "New Note Title";
+  const exampleLabel = exampleNote ? `${exampleTitle} markdown` : "Content (Markdown)";
+  if (exampleNote) state.previewNoteId = exampleNote.id;
 
   app.innerHTML = shell(`
     <main class="layout">
@@ -337,13 +345,13 @@ nmap -sV -sC <TARGET_IP> -oA scans/<HOSTNAME>
       <section class="hero-row">
         <div>
           <h1>Markdown <span class="accent">Render Check</span></h1>
-          <div class="subtitle">Write Markdown here before adding a file under content/notes and linking it in data/archive.json.</div>
+          <div class="subtitle">Previewing ${escapeHtml(exampleTitle)} as the render example.</div>
         </div>
         <a class="secondary-button" href="#/category">Back to archive</a>
       </section>
       <section class="preview-grid">
         <div class="editor-card">
-          <header><strong>Content (Markdown)</strong><button class="secondary-button" id="load-example">Example</button></header>
+          <header><strong>${escapeHtml(exampleLabel)}</strong><button class="secondary-button" id="load-example">Example</button></header>
           <textarea id="markdown-input" spellcheck="false">${escapeHtml(sample)}</textarea>
         </div>
         <div class="editor-card">
