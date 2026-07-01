@@ -12,7 +12,11 @@
     { "key": "TOKEN", "example": "eyJhbGciOi..." },
     { "key": "PACKAGE", "example": "com.example.app" },
     { "key": "BUCKET", "example": "target-bucket" },
-    { "key": "ARN", "example": "arn:aws:iam::123456789012:user/tester" }
+    { "key": "ARN", "example": "arn:aws:iam::123456789012:user/tester" },
+    { "key": "GRAPHQL_PATH", "example": "/graphql" },
+    { "key": "OBJECT_ID", "example": "1001" },
+    { "key": "ACCOUNT", "example": "storageaccount" },
+    { "key": "CONTAINER", "example": "public" }
   ],
   "categories": [
     {
@@ -257,6 +261,56 @@
       ]
     },
     {
+      "id": "api-graphql-introspection",
+      "title": "GraphQL Introspection Review",
+      "category": "API",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "tags": ["graphql", "schema", "introspection", "recon"],
+      "file": "content/notes/api-graphql-introspection.md",
+      "commands": [
+        "curl -s <URL><GRAPHQL_PATH> -H 'Content-Type: application/json' --data '{\"query\":\"{__schema{types{name}}}\"}'",
+        "graphql-cop -t <URL><GRAPHQL_PATH>",
+        "inql -t <URL><GRAPHQL_PATH> -o graphql-schema"
+      ],
+      "checklist": [
+        "Confirm GraphQL endpoint is in scope",
+        "Check whether introspection is enabled",
+        "Export schema for offline review",
+        "Identify sensitive queries and mutations",
+        "Link risky operations to authorization tests"
+      ],
+      "next": ["api-idor-testing", "api-jwt-review"],
+      "references": [
+        { "label": "OWASP GraphQL Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html" }
+      ]
+    },
+    {
+      "id": "api-idor-testing",
+      "title": "BOLA / IDOR Testing",
+      "category": "API",
+      "phase": "Exploitation",
+      "severity": "Critical",
+      "tags": ["bola", "idor", "authorization", "api1"],
+      "file": "content/notes/api-idor-testing.md",
+      "commands": [
+        "curl -i -H \"Authorization: Bearer <TOKEN>\" <URL>/api/users/<OBJECT_ID>",
+        "ffuf -w <WORDLIST> -u <URL>/api/users/FUZZ -H \"Authorization: Bearer <TOKEN>\" -mc all",
+        "curl -i -X PUT -H \"Authorization: Bearer <TOKEN>\" -H 'Content-Type: application/json' <URL>/api/users/<OBJECT_ID> -d '{\"role\":\"user\"}'"
+      ],
+      "checklist": [
+        "Create or obtain two different in-scope users",
+        "Capture object ids from normal traffic",
+        "Replay requests with another user's token",
+        "Test read, update, delete, and export endpoints",
+        "Document object owner, acting user, and impact"
+      ],
+      "next": ["api-jwt-review", "api-rate-limit-testing"],
+      "references": [
+        { "label": "OWASP API1 BOLA", "url": "https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/" }
+      ]
+    },
+    {
       "id": "mobile-apk-static-analysis",
       "title": "APK Static Analysis",
       "category": "Mobile",
@@ -308,6 +362,57 @@
       ]
     },
     {
+      "id": "mobile-frida-runtime-hooks",
+      "title": "Frida Runtime Hooking",
+      "category": "Mobile",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["frida", "runtime", "android", "instrumentation"],
+      "file": "content/notes/mobile-frida-runtime-hooks.md",
+      "commands": [
+        "frida-ps -Uai",
+        "frida -U -f <PACKAGE> -l hooks.js --no-pause",
+        "objection -g <PACKAGE> explore"
+      ],
+      "checklist": [
+        "Confirm device and app build are in scope",
+        "Start Frida server or gadget",
+        "Identify target process and package",
+        "Hook sensitive methods safely",
+        "Record bypassed control and runtime evidence"
+      ],
+      "next": ["mobile-tls-pinning-review", "mobile-apk-static-analysis"],
+      "references": [
+        { "label": "Frida Docs", "url": "https://frida.re/docs/home/" },
+        { "label": "Objection", "url": "https://github.com/sensepost/objection" }
+      ]
+    },
+    {
+      "id": "mobile-tls-pinning-review",
+      "title": "TLS Pinning Review",
+      "category": "Mobile",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["tls", "pinning", "proxy", "android"],
+      "file": "content/notes/mobile-tls-pinning-review.md",
+      "commands": [
+        "adb shell settings put global http_proxy <TARGET_IP>:8080",
+        "objection -g <PACKAGE> android sslpinning disable",
+        "grep -RniE 'CertificatePinner|TrustManager|network_security_config' output/"
+      ],
+      "checklist": [
+        "Install test CA on the device or emulator",
+        "Proxy normal app traffic",
+        "Identify pinning implementation",
+        "Bypass pinning only inside authorized testing",
+        "Document sensitive requests exposed through interception"
+      ],
+      "next": ["mobile-frida-runtime-hooks", "mobile-deeplink-testing"],
+      "references": [
+        { "label": "OWASP MASTG Network Communication", "url": "https://mas.owasp.org/MASTG/tests/android/MASVS-NETWORK/" }
+      ]
+    },
+    {
       "id": "cloud-s3-public-exposure",
       "title": "S3 Public Exposure Review",
       "category": "Cloud",
@@ -356,6 +461,57 @@
       "next": ["cloud-s3-public-exposure"],
       "references": [
         { "label": "AWS IAM Policy Simulator", "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html" }
+      ]
+    },
+    {
+      "id": "cloud-azure-blob-exposure",
+      "title": "Azure Blob Exposure Review",
+      "category": "Cloud",
+      "phase": "Enumeration",
+      "severity": "High",
+      "tags": ["azure", "blob", "storage", "public-access"],
+      "file": "content/notes/cloud-azure-blob-exposure.md",
+      "commands": [
+        "az storage container show --account-name <ACCOUNT> --name <CONTAINER> --auth-mode login",
+        "az storage blob list --account-name <ACCOUNT> --container-name <CONTAINER> --auth-mode login -o table",
+        "curl -I https://<ACCOUNT>.blob.core.windows.net/<CONTAINER>/<FILE>"
+      ],
+      "checklist": [
+        "Confirm tenant, subscription, account, and container are in scope",
+        "Check container public access level",
+        "List blobs with authenticated context",
+        "Test anonymous access only when allowed",
+        "Document container, blob path, and exposure type"
+      ],
+      "next": ["cloud-s3-public-exposure", "cloud-iam-privilege-review"],
+      "references": [
+        { "label": "Azure Blob anonymous access", "url": "https://learn.microsoft.com/en-us/azure/storage/blobs/anonymous-read-access-configure" }
+      ]
+    },
+    {
+      "id": "cloud-metadata-service-review",
+      "title": "Cloud Metadata Service Review",
+      "category": "Cloud",
+      "phase": "Post-Exploitation",
+      "severity": "Critical",
+      "tags": ["metadata", "ssrf", "credentials", "cloud"],
+      "file": "content/notes/cloud-metadata-service-review.md",
+      "commands": [
+        "curl -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/",
+        "curl -H 'Metadata:true' 'http://169.254.169.254/metadata/instance?api-version=2021-02-01'",
+        "curl -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 21600'"
+      ],
+      "checklist": [
+        "Confirm metadata testing is explicitly authorized",
+        "Identify cloud provider and workload context",
+        "Check whether metadata requires defensive headers or tokens",
+        "Avoid extracting secrets unless scope permits it",
+        "Document reachable endpoint, control gap, and mitigation"
+      ],
+      "next": ["cloud-iam-privilege-review", "cloud-azure-blob-exposure"],
+      "references": [
+        { "label": "AWS IMDSv2", "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html" },
+        { "label": "Azure Instance Metadata Service", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service" }
       ]
     }
   ]
