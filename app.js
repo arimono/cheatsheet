@@ -53,7 +53,7 @@ function hydrateVariables() {
 function route() {
   const hash = location.hash.replace(/^#\/?/, "");
   const [view, id] = hash.split("/");
-  return { view: view || "category", id };
+  return { view: view || "category", id: decodeURIComponent(id || "") };
 }
 
 function shell(content) {
@@ -81,21 +81,13 @@ async function render() {
   } else if (current.view === "preview") {
     renderPreview();
   } else {
+    syncCategoryFromRoute(current.id);
     renderCategory();
   }
   bindGlobal();
 }
 
 function bindGlobal() {
-  document.querySelectorAll("[data-category]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.category = button.dataset.category;
-      state.phase = "All";
-      location.hash = "#/category";
-      renderCategory();
-    });
-  });
-
   const search = document.querySelector("#global-search");
   if (search) {
     search.addEventListener("input", () => {
@@ -111,6 +103,25 @@ function bindGlobal() {
 }
 
 function handleAppClick(event) {
+  const categoryButton = event.target.closest("[data-category]");
+  if (categoryButton) {
+    event.preventDefault();
+    state.category = categoryButton.dataset.category;
+    state.phase = "All";
+    const nextHash = `#/category/${encodeURIComponent(state.category)}`;
+    if (location.hash === nextHash) renderCategory();
+    else location.hash = nextHash;
+    return;
+  }
+
+  const phaseButton = event.target.closest("[data-phase]");
+  if (phaseButton) {
+    event.preventDefault();
+    state.phase = phaseButton.dataset.phase;
+    renderCategory();
+    return;
+  }
+
   const copyButton = event.target.closest("[data-copy]");
   if (!copyButton) return;
   event.preventDefault();
@@ -120,17 +131,13 @@ function handleAppClick(event) {
 
 function renderCategory() {
   const category = getCategory();
-  const selectedPhaseCount = state.data.notes.filter((note) => note.category === state.category && note.phase === state.phase).length;
-  if (state.phase !== "All" && selectedPhaseCount === 0) {
-    state.phase = "All";
-  }
   const notes = filteredNotes();
   const byPhase = phases.map((phase) => ({ phase, notes: notes.filter((note) => note.phase === phase) })).filter((group) => group.notes.length);
   const total = state.data.notes.filter((note) => note.category === state.category).length;
 
   app.innerHTML = shell(`
     <main class="layout">
-      <div class="breadcrumb"><span>Archive</span><span>›</span><strong>${escapeHtml(category.name)}</strong><span class="cursor"></span></div>
+      <div class="breadcrumb"><a href="#/category">Archive</a><span>›</span><strong>${escapeHtml(category.name)}</strong><span class="cursor"></span></div>
       <section class="hero-row">
         <div>
           <h1>${escapeHtml(category.titleStart)} <span class="accent">${escapeHtml(category.titleAccent)}</span></h1>
@@ -156,12 +163,6 @@ function renderCategory() {
     </main>
   `);
 
-  document.querySelectorAll("[data-phase]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.phase = button.dataset.phase;
-      renderCategory();
-    });
-  });
 }
 
 function phaseLink(phase) {
@@ -230,7 +231,7 @@ async function renderNote(id) {
       </aside>
       <article class="note">
         <header class="note-header">
-          <div class="breadcrumb"><a href="#/category">Archive</a><span>›</span><strong>${escapeHtml(getCategory(note.category).name)}</strong><span>›</span><strong>${escapeHtml(note.title)}</strong><span class="cursor"></span></div>
+          <div class="breadcrumb"><a href="#/category/${encodeURIComponent(note.category)}">Archive</a><span>›</span><strong>${escapeHtml(getCategory(note.category).name)}</strong><span>›</span><strong>${escapeHtml(note.title)}</strong><span class="cursor"></span></div>
           <h1>${escapeHtml(note.title)}</h1>
           <div class="badges">
             <span class="badge">${escapeHtml(note.category)}</span>
@@ -332,7 +333,7 @@ nmap -sV -sC <TARGET_IP> -oA scans/<HOSTNAME>
 
   app.innerHTML = shell(`
     <main class="layout">
-      <div class="breadcrumb"><span>Archive</span><span>›</span><strong>Contributor Preview</strong><span class="cursor"></span></div>
+      <div class="breadcrumb"><a href="#/category">Archive</a><span>›</span><strong>Contributor Preview</strong><span class="cursor"></span></div>
       <section class="hero-row">
         <div>
           <h1>Markdown <span class="accent">Render Check</span></h1>
@@ -367,6 +368,15 @@ nmap -sV -sC <TARGET_IP> -oA scans/<HOSTNAME>
 
 function getCategory(id = state.category) {
   return state.data.categories.find((cat) => cat.id === id) || state.data.categories[0];
+}
+
+function syncCategoryFromRoute(id) {
+  if (!id) {
+    state.category = state.data.categories[0].id;
+    return;
+  }
+  const category = state.data.categories.find((cat) => cat.id.toLowerCase() === id.toLowerCase());
+  if (category) state.category = category.id;
 }
 
 function filteredNotes() {
