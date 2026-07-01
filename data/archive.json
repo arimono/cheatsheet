@@ -1602,6 +1602,156 @@
       ]
     },
     {
+      "id": "ad-persistence-gpo-startup-review",
+      "title": "GPO Startup Persistence Review",
+      "category": "AD",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["gpo", "startup-script", "persistence", "windows"],
+      "file": "content/notes/ad-persistence-gpo-startup-review.md",
+      "commands": [
+        "Get-GPO -All | Select-Object DisplayName,Id,ModificationTime",
+        "Get-GPResultantSetOfPolicy -ReportType Html -Path rsop.html",
+        "Get-ChildItem \\\\<DOMAIN>\\SYSVOL\\<DOMAIN>\\Policies -Recurse -Include *.ps1,*.bat,*.cmd"
+      ],
+      "checklist": [
+        "Confirm GPO persistence review is authorized",
+        "Inventory recently modified GPOs and linked OUs",
+        "Review startup, logon, shutdown, and logoff scripts",
+        "Correlate SYSVOL script changes with admin activity",
+        "Document cleanup and GPO change monitoring"
+      ],
+      "next": ["ad-persistence-scheduled-task", "ad-reporting-attack-path-summary"],
+      "references": [
+        { "label": "MITRE Group Policy Modification", "url": "https://attack.mitre.org/techniques/T1484/001/" }
+      ]
+    },
+    {
+      "id": "network-persistence-firewall-rule-review",
+      "title": "Firewall Rule Persistence Review",
+      "category": "Network",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["firewall", "access-control", "persistence", "network"],
+      "file": "content/notes/network-persistence-firewall-rule-review.md",
+      "commands": [
+        "netsh advfirewall firewall show rule name=all",
+        "Get-NetFirewallRule | Where-Object {$_.Enabled -eq 'True'}",
+        "iptables -S"
+      ],
+      "checklist": [
+        "Confirm firewall review is in scope",
+        "Export host and perimeter firewall rules",
+        "Identify newly added allow rules and broad sources",
+        "Map rules to listening services and owners",
+        "Document rule cleanup and monitoring recommendations"
+      ],
+      "next": ["network-persistence-pivot-review", "network-reporting-exposure-matrix"],
+      "references": [
+        { "label": "MITRE Impair Defenses Firewall", "url": "https://attack.mitre.org/techniques/T1562/004/" }
+      ]
+    },
+    {
+      "id": "web-persistence-cron-job-review",
+      "title": "Web Server Cron Persistence Review",
+      "category": "Web",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["cron", "web-server", "persistence", "linux"],
+      "file": "content/notes/web-persistence-cron-job-review.md",
+      "commands": [
+        "crontab -l",
+        "find /etc/cron* -type f -mtime -30",
+        "systemctl list-timers --all"
+      ],
+      "checklist": [
+        "Confirm server persistence review is authorized",
+        "List user, system, and application scheduled jobs",
+        "Check jobs that execute from web roots or temp paths",
+        "Correlate job creation time with deployment and test windows",
+        "Document cleanup and scheduler monitoring"
+      ],
+      "next": ["web-persistence-webshell-review", "web-reporting-vulnerability-writeup"],
+      "references": [
+        { "label": "MITRE Scheduled Task Job Cron", "url": "https://attack.mitre.org/techniques/T1053/003/" }
+      ]
+    },
+    {
+      "id": "api-persistence-api-key-review",
+      "title": "API Key Persistence Review",
+      "category": "API",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["api-key", "credential", "rotation", "persistence"],
+      "file": "content/notes/api-persistence-api-key-review.md",
+      "commands": [
+        "curl -i -H \"Authorization: Bearer <TOKEN>\" <URL>/api/keys",
+        "curl -i -H \"Authorization: Bearer <TOKEN>\" <URL>/api/audit-log",
+        "curl -i -X POST <URL>/api/logout -H \"Authorization: Bearer <TOKEN>\""
+      ],
+      "checklist": [
+        "Confirm API key review is in scope",
+        "Inventory active keys, scopes, owners, and creation dates",
+        "Check rotation, expiration, and revocation behavior",
+        "Validate whether keys survive logout or account disablement",
+        "Document replay window and least-privilege remediation"
+      ],
+      "next": ["api-persistence-token-lifetime-review", "api-reporting-endpoint-risk-register"],
+      "references": [
+        { "label": "OWASP API Security Top 10", "url": "https://owasp.org/API-Security/" }
+      ]
+    },
+    {
+      "id": "mobile-persistence-keystore-token-review",
+      "title": "Keystore Token Persistence Review",
+      "category": "Mobile",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["mobile", "keystore", "token", "persistence"],
+      "file": "content/notes/mobile-persistence-keystore-token-review.md",
+      "commands": [
+        "adb shell run-as <PACKAGE> ls -la files shared_prefs databases",
+        "adb shell run-as <PACKAGE> grep -RniE 'token|refresh|key|session' files shared_prefs databases",
+        "adb shell pm clear <PACKAGE>"
+      ],
+      "checklist": [
+        "Confirm local data review is authorized",
+        "Identify tokens and keys stored by the app",
+        "Check whether logout removes persistent credentials",
+        "Validate behavior after app data clear or reinstall",
+        "Document storage path, lifetime, and remediation"
+      ],
+      "next": ["mobile-persistence-background-service-review", "mobile-reporting-masvs-mapping"],
+      "references": [
+        { "label": "OWASP MASVS Storage", "url": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE/" }
+      ]
+    },
+    {
+      "id": "cloud-persistence-role-trust-review",
+      "title": "Role Trust Persistence Review",
+      "category": "Cloud",
+      "phase": "Persistence",
+      "severity": "Critical",
+      "tags": ["cloud", "iam", "role-trust", "persistence"],
+      "file": "content/notes/cloud-persistence-role-trust-review.md",
+      "commands": [
+        "aws iam list-roles",
+        "aws iam get-role --role-name <USER>",
+        "aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=UpdateAssumeRolePolicy"
+      ],
+      "checklist": [
+        "Confirm role trust review is in scope",
+        "List roles with external or cross-account principals",
+        "Check recently modified assume-role policies",
+        "Review conditions such as external id and MFA requirements",
+        "Document risky trust paths and least-privilege changes"
+      ],
+      "next": ["cloud-persistence-access-key-review", "cloud-reporting-control-gap-summary"],
+      "references": [
+        { "label": "AWS IAM role trust policies", "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_update-role-trust-policy.html" }
+      ]
+    },
+    {
       "id": "cloud-reporting-control-gap-summary",
       "title": "Cloud Control Gap Summary",
       "category": "Cloud",
