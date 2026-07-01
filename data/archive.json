@@ -1325,6 +1325,306 @@
       "references": [
         { "label": "GCP IAM", "url": "https://cloud.google.com/iam/docs" }
       ]
+    },
+    {
+      "id": "ad-persistence-scheduled-task",
+      "title": "Scheduled Task Persistence Validation",
+      "category": "AD",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["scheduled-task", "windows", "persistence", "validation"],
+      "file": "content/notes/ad-persistence-scheduled-task.md",
+      "commands": [
+        "schtasks /query /s <HOSTNAME> /fo LIST /v",
+        "Get-ScheduledTask | Where-Object {$_.TaskPath -notlike '\\Microsoft*'}",
+        "Get-EventLog -LogName Security -InstanceId 4698 -Newest 20"
+      ],
+      "checklist": [
+        "Confirm persistence validation is authorized",
+        "Inventory non-default scheduled tasks",
+        "Check task author, action, trigger, and run-as account",
+        "Correlate creation events with test window",
+        "Document cleanup and defensive detection"
+      ],
+      "next": ["ad-dcsync-permission-review", "ad-reporting-attack-path-summary"],
+      "references": [
+        { "label": "MITRE Scheduled Task", "url": "https://attack.mitre.org/techniques/T1053/005/" }
+      ]
+    },
+    {
+      "id": "ad-reporting-attack-path-summary",
+      "title": "AD Attack Path Reporting",
+      "category": "AD",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "attack-path", "bloodhound", "remediation"],
+      "file": "content/notes/ad-reporting-attack-path-summary.md",
+      "commands": [
+        "mkdir -p reports/ad/{screenshots,bloodhound,evidence}",
+        "Get-ADDomain | Out-File reports/ad/domain-summary.txt",
+        "Get-ADDefaultDomainPasswordPolicy | Out-File reports/ad/password-policy.txt"
+      ],
+      "checklist": [
+        "Summarize attack path in business language",
+        "Include shortest path screenshots and affected principals",
+        "Separate proof from sensitive secret material",
+        "Map each issue to owner and remediation",
+        "Add retest steps and success criteria"
+      ],
+      "next": ["bloodhound-domain-enumeration"],
+      "references": [
+        { "label": "BloodHound docs", "url": "https://bloodhound.readthedocs.io/en/latest/index.html" }
+      ]
+    },
+    {
+      "id": "network-persistence-pivot-review",
+      "title": "Pivot and Tunnel Persistence Review",
+      "category": "Network",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["pivot", "tunnel", "persistence", "network"],
+      "file": "content/notes/network-persistence-pivot-review.md",
+      "commands": [
+        "netstat -ano",
+        "ss -tunlp",
+        "Get-NetTCPConnection | Sort-Object LocalPort"
+      ],
+      "checklist": [
+        "Confirm pivot validation is in scope",
+        "Inventory unexpected listeners and outbound tunnels",
+        "Correlate process, user, and start time",
+        "Check firewall rules and startup locations",
+        "Document cleanup and detection opportunities"
+      ],
+      "next": ["network-service-scan", "network-reporting-exposure-matrix"],
+      "references": [
+        { "label": "MITRE Proxy", "url": "https://attack.mitre.org/techniques/T1090/" }
+      ]
+    },
+    {
+      "id": "network-reporting-exposure-matrix",
+      "title": "Network Exposure Matrix",
+      "category": "Network",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "exposure", "matrix", "remediation"],
+      "file": "content/notes/network-reporting-exposure-matrix.md",
+      "commands": [
+        "mkdir -p reports/network/{scans,evidence,summary}",
+        "cp scans/* reports/network/scans/",
+        "find reports/network/scans -type f -maxdepth 1"
+      ],
+      "checklist": [
+        "Group findings by exposed asset and service",
+        "Map ports to business owner and data sensitivity",
+        "Prioritize internet-facing and unauthenticated exposure",
+        "Include exact scan command and timestamp",
+        "Add validation steps for remediation teams"
+      ],
+      "next": ["network-service-scan", "network-evidence-reporting"],
+      "references": [
+        { "label": "Nmap output formats", "url": "https://nmap.org/book/man-output.html" }
+      ]
+    },
+    {
+      "id": "web-persistence-webshell-review",
+      "title": "Web Shell Persistence Review",
+      "category": "Web",
+      "phase": "Persistence",
+      "severity": "Critical",
+      "tags": ["webshell", "upload", "persistence", "server"],
+      "file": "content/notes/web-persistence-webshell-review.md",
+      "commands": [
+        "find /var/www -type f -mtime -7",
+        "grep -RniE 'eval\\(|system\\(|shell_exec\\(|passthru\\(' /var/www",
+        "find /var/www -type f -name '*.php' -size -10k"
+      ],
+      "checklist": [
+        "Confirm server-side persistence review is authorized",
+        "Search recent and unusual web-root files",
+        "Review upload directories and executable extensions",
+        "Correlate file timestamps with test activity",
+        "Document safe cleanup and monitoring recommendations"
+      ],
+      "next": ["web-file-upload-testing", "web-reporting-vulnerability-writeup"],
+      "references": [
+        { "label": "MITRE Web Shell", "url": "https://attack.mitre.org/techniques/T1505/003/" }
+      ]
+    },
+    {
+      "id": "web-reporting-vulnerability-writeup",
+      "title": "Web Vulnerability Writeup",
+      "category": "Web",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "evidence", "reproduction", "remediation"],
+      "file": "content/notes/web-reporting-vulnerability-writeup.md",
+      "commands": [
+        "mkdir -p reports/web/{requests,responses,screenshots}",
+        "curl -i <URL> -o reports/web/responses/baseline.txt",
+        "date -u +%Y-%m-%dT%H:%M:%SZ"
+      ],
+      "checklist": [
+        "Write clear affected URL and parameter",
+        "Include request, response, and screenshot evidence",
+        "Explain impact without overstating severity",
+        "Add remediation with secure code guidance",
+        "Provide exact retest steps"
+      ],
+      "next": ["web-content-discovery", "web-authentication-testing"],
+      "references": [
+        { "label": "OWASP WSTG", "url": "https://owasp.org/www-project-web-security-testing-guide/" }
+      ]
+    },
+    {
+      "id": "api-persistence-token-lifetime-review",
+      "title": "Long-Lived Token Persistence Review",
+      "category": "API",
+      "phase": "Persistence",
+      "severity": "High",
+      "tags": ["token", "refresh-token", "session", "persistence"],
+      "file": "content/notes/api-persistence-token-lifetime-review.md",
+      "commands": [
+        "curl -i -H \"Authorization: Bearer <TOKEN>\" <URL>/api/me",
+        "jq -R 'split(\".\") | .[1] | @base64d | fromjson' token.txt",
+        "curl -i -X POST <URL>/api/logout -H \"Authorization: Bearer <TOKEN>\""
+      ],
+      "checklist": [
+        "Collect token lifetime and refresh behavior",
+        "Check logout invalidation",
+        "Test password-change and role-change revocation",
+        "Review device/session management endpoints",
+        "Document replay window and remediation"
+      ],
+      "next": ["api-jwt-review", "api-reporting-endpoint-risk-register"],
+      "references": [
+        { "label": "OAuth 2.0 Security Best Current Practice", "url": "https://datatracker.ietf.org/doc/html/draft-ietf-oauth-security-topics" }
+      ]
+    },
+    {
+      "id": "api-reporting-endpoint-risk-register",
+      "title": "API Endpoint Risk Register",
+      "category": "API",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "risk-register", "endpoint", "api"],
+      "file": "content/notes/api-reporting-endpoint-risk-register.md",
+      "commands": [
+        "curl -s <URL><OPENAPI_PATH> | jq -r '.paths | keys[]'",
+        "mkdir -p reports/api/{requests,spec,evidence}",
+        "cp openapi.json reports/api/spec/openapi.json"
+      ],
+      "checklist": [
+        "List endpoint, method, auth requirement, and data class",
+        "Map each finding to OWASP API category",
+        "Include request and response evidence",
+        "Flag systemic authorization or validation patterns",
+        "Add retest cases for each endpoint"
+      ],
+      "next": ["api-openapi-review", "api-idor-testing"],
+      "references": [
+        { "label": "OWASP API Security", "url": "https://owasp.org/API-Security/" }
+      ]
+    },
+    {
+      "id": "mobile-persistence-background-service-review",
+      "title": "Background Service Persistence Review",
+      "category": "Mobile",
+      "phase": "Persistence",
+      "severity": "Medium",
+      "tags": ["mobile", "background-service", "receiver", "persistence"],
+      "file": "content/notes/mobile-persistence-background-service-review.md",
+      "commands": [
+        "adb shell dumpsys package <PACKAGE> | grep -iE 'receiver|service|boot'",
+        "grep -RniE 'BOOT_COMPLETED|JobScheduler|WorkManager|ForegroundService' output/",
+        "adb shell am broadcast -a android.intent.action.BOOT_COMPLETED -p <PACKAGE>"
+      ],
+      "checklist": [
+        "Confirm lifecycle testing is in scope",
+        "Identify services, receivers, and boot handlers",
+        "Check whether sensitive actions run in background",
+        "Validate user consent and notification behavior",
+        "Document abuse case and platform control"
+      ],
+      "next": ["mobile-apk-static-analysis", "mobile-reporting-masvs-mapping"],
+      "references": [
+        { "label": "Android background work", "url": "https://developer.android.com/develop/background-work" }
+      ]
+    },
+    {
+      "id": "mobile-reporting-masvs-mapping",
+      "title": "MASVS Reporting Map",
+      "category": "Mobile",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "masvs", "mobile", "evidence"],
+      "file": "content/notes/mobile-reporting-masvs-mapping.md",
+      "commands": [
+        "mkdir -p reports/mobile/{static,dynamic,traffic,screenshots}",
+        "adb shell pm path <PACKAGE>",
+        "adb shell dumpsys package <PACKAGE> > reports/mobile/static/package-dump.txt"
+      ],
+      "checklist": [
+        "Map each finding to MASVS control",
+        "Separate static, dynamic, and traffic evidence",
+        "Include device, OS, app version, and build hash",
+        "Avoid storing live secrets in final report",
+        "Write retest steps for each platform"
+      ],
+      "next": ["mobile-apk-static-analysis", "mobile-tls-pinning-review"],
+      "references": [
+        { "label": "OWASP MASVS", "url": "https://mas.owasp.org/MASVS/" }
+      ]
+    },
+    {
+      "id": "cloud-persistence-access-key-review",
+      "title": "Access Key Persistence Review",
+      "category": "Cloud",
+      "phase": "Persistence",
+      "severity": "Critical",
+      "tags": ["cloud", "access-key", "iam", "persistence"],
+      "file": "content/notes/cloud-persistence-access-key-review.md",
+      "commands": [
+        "aws iam list-access-keys --user-name <USER>",
+        "aws iam get-access-key-last-used --access-key-id <FILE>",
+        "aws cloudtrail lookup-events --lookup-attributes AttributeKey=Username,AttributeValue=<USER>"
+      ],
+      "checklist": [
+        "Confirm cloud identity review is in scope",
+        "List stale and newly created access keys",
+        "Check last-used service and region",
+        "Correlate key creation with test window",
+        "Recommend rotation and least-privilege controls"
+      ],
+      "next": ["cloud-iam-privilege-review", "cloud-reporting-control-gap-summary"],
+      "references": [
+        { "label": "AWS access key management", "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html" }
+      ]
+    },
+    {
+      "id": "cloud-reporting-control-gap-summary",
+      "title": "Cloud Control Gap Summary",
+      "category": "Cloud",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "cloud", "control-gap", "remediation"],
+      "file": "content/notes/cloud-reporting-control-gap-summary.md",
+      "commands": [
+        "mkdir -p reports/cloud/{iam,network,storage,evidence}",
+        "aws sts get-caller-identity > reports/cloud/iam/caller-identity.json",
+        "date -u +%Y-%m-%dT%H:%M:%SZ > reports/cloud/report-time.txt"
+      ],
+      "checklist": [
+        "Group findings by identity, network, storage, and workload",
+        "Record account, subscription, project, and region",
+        "Include blast radius and affected data classification",
+        "Map remediation to cloud-native control",
+        "Add retest commands and expected secure output"
+      ],
+      "next": ["cloud-iam-privilege-review", "cloud-security-group-review"],
+      "references": [
+        { "label": "AWS Well-Architected Security Pillar", "url": "https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/welcome.html" }
+      ]
     }
   ]
 }
