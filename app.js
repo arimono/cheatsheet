@@ -58,7 +58,10 @@ function route() {
 }
 
 function shell(content) {
-  const previewHref = state.previewNoteId ? `#/preview/${encodeURIComponent(state.previewNoteId)}` : "#/preview";
+  const current = route();
+  const previewHref = current.view === "preview"
+    ? (current.id ? `#/note/${encodeURIComponent(current.id)}` : "#/category")
+    : (state.previewNoteId ? `#/preview/${encodeURIComponent(state.previewNoteId)}` : "#/preview");
   return `
     <div class="shell">
       <header class="topbar">
