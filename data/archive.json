@@ -1,0 +1,362 @@
+{
+  "variables": [
+    { "key": "TARGET_IP", "example": "10.10.10.10" },
+    { "key": "HOSTNAME", "example": "target" },
+    { "key": "DOMAIN", "example": "admin.htb" },
+    { "key": "USER", "example": "admin" },
+    { "key": "PASSWORD", "example": "Password123!" },
+    { "key": "DC_IP", "example": "10.10.10.5" },
+    { "key": "URL", "example": "http://10.10.10.10" },
+    { "key": "WORDLIST", "example": "/usr/share/wordlists/rockyou.txt" },
+    { "key": "FILE", "example": "users.txt" },
+    { "key": "TOKEN", "example": "eyJhbGciOi..." },
+    { "key": "PACKAGE", "example": "com.example.app" },
+    { "key": "BUCKET", "example": "target-bucket" },
+    { "key": "ARN", "example": "arn:aws:iam::123456789012:user/tester" }
+  ],
+  "categories": [
+    {
+      "id": "AD",
+      "label": "AD",
+      "name": "Active Directory Pentest",
+      "titleStart": "Active Directory",
+      "titleAccent": "Pentest"
+    },
+    {
+      "id": "Network",
+      "label": "Network",
+      "name": "Network Pentest",
+      "titleStart": "Network",
+      "titleAccent": "Pentest"
+    },
+    {
+      "id": "Web",
+      "label": "Web",
+      "name": "Web Application Pentest",
+      "titleStart": "Web Application",
+      "titleAccent": "Pentest"
+    },
+    {
+      "id": "API",
+      "label": "API",
+      "name": "API Pentest",
+      "titleStart": "API",
+      "titleAccent": "Pentest"
+    },
+    {
+      "id": "Mobile",
+      "label": "Mobile",
+      "name": "Mobile Pentest",
+      "titleStart": "Mobile",
+      "titleAccent": "Pentest"
+    },
+    {
+      "id": "Cloud",
+      "label": "Cloud",
+      "name": "Cloud Pentest",
+      "titleStart": "Cloud",
+      "titleAccent": "Pentest"
+    }
+  ],
+  "notes": [
+    {
+      "id": "bloodhound-domain-enumeration",
+      "title": "BloodHound Domain Enumeration",
+      "category": "AD",
+      "phase": "Enumeration",
+      "severity": "Info",
+      "featured": true,
+      "tags": ["bloodhound", "enumeration", "graph-analysis", "attack-path"],
+      "file": "content/notes/bloodhound-domain-enumeration.md",
+      "commands": [
+        "bloodhound-python -d <DOMAIN> -u <USER> -p <PASSWORD> -c all -ns <DC_IP>",
+        "SharpHound.exe -c all --zipfilename output.zip",
+        "Invoke-BloodHound -CollectionMethod All -OutputDirectory C:\\temp"
+      ],
+      "checklist": [
+        "Install BloodHound and Neo4j",
+        "Run SharpHound or bloodhound-python collector",
+        "Import data into BloodHound",
+        "Analyze shortest paths to Domain Admin",
+        "Check for Kerberoastable users on DA path",
+        "Document all attack paths"
+      ],
+      "next": ["kerberoasting-attack", "asrep-roasting"],
+      "references": [
+        { "label": "BloodHound GitHub", "url": "https://github.com/BloodHoundAD/BloodHound" },
+        { "label": "BloodHound docs", "url": "https://bloodhound.readthedocs.io/en/latest/index.html" }
+      ]
+    },
+    {
+      "id": "kerberoasting-attack",
+      "title": "Kerberoasting Attack",
+      "category": "AD",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["kerberos", "service-accounts", "credential-access", "T1558.003"],
+      "file": "content/notes/kerberoasting-attack.md",
+      "commands": [
+        "GetUserSPNs.py -request -dc-ip <DC_IP> <DOMAIN>/<USER>:<PASSWORD> -outputfile kerberoast.hashes",
+        "hashcat -m 13100 kerberoast.hashes <WORDLIST> --force",
+        "Get-ADUser -Filter {ServicePrincipalName -ne \"$null\"} -Properties ServicePrincipalName"
+      ],
+      "checklist": [
+        "Confirm a domain user credential is in scope",
+        "Request SPN tickets",
+        "Crack hashes offline",
+        "Validate cracked credential carefully",
+        "Map privilege and reuse paths"
+      ],
+      "next": ["bloodhound-domain-enumeration"],
+      "references": [
+        { "label": "MITRE T1558.003", "url": "https://attack.mitre.org/techniques/T1558/003/" }
+      ]
+    },
+    {
+      "id": "asrep-roasting",
+      "title": "AS-REP Roasting",
+      "category": "AD",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["kerberos", "pre-auth", "credential-access"],
+      "file": "content/notes/asrep-roasting.md",
+      "commands": [
+        "GetNPUsers.py <DOMAIN>/ -usersfile <FILE> -format hashcat -outputfile asrep.hashes -dc-ip <DC_IP>",
+        "hashcat -m 18200 asrep.hashes <WORDLIST>",
+        "Get-ADUser -Filter 'DoesNotRequirePreAuth -eq $true' -Properties DoesNotRequirePreAuth"
+      ],
+      "checklist": [
+        "Collect candidate usernames",
+        "Request AS-REP hashes",
+        "Crack hashes offline",
+        "Test credentials only inside scope"
+      ],
+      "next": ["bloodhound-domain-enumeration"],
+      "references": [
+        { "label": "MITRE T1558.004", "url": "https://attack.mitre.org/techniques/T1558/004/" }
+      ]
+    },
+    {
+      "id": "network-service-scan",
+      "title": "Network Service Scan",
+      "category": "Network",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "tags": ["nmap", "service-discovery", "fingerprint"],
+      "file": "content/notes/network-service-scan.md",
+      "commands": [
+        "nmap -sV -sC -oA scans/<HOSTNAME> <TARGET_IP>",
+        "nmap -p- --min-rate 5000 -oA scans/<HOSTNAME>-allports <TARGET_IP>"
+      ],
+      "checklist": [
+        "Confirm target is in scope",
+        "Run TCP service scan",
+        "Run full port sweep if allowed",
+        "Create service notes and follow-up links"
+      ],
+      "next": [],
+      "references": [
+        { "label": "Nmap reference guide", "url": "https://nmap.org/book/man.html" }
+      ]
+    },
+    {
+      "id": "sql-injection-testing",
+      "title": "SQL Injection Testing",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "Critical",
+      "tags": ["sqli", "injection", "owasp-top10", "A03:2021"],
+      "file": "content/notes/sql-injection-testing.md",
+      "commands": [
+        "sqlmap -u '<URL>/page?id=1' --dbs --batch",
+        "sqlmap -u '<URL>/page?id=1' --risk=2 --level=3 --batch"
+      ],
+      "checklist": [
+        "Confirm testing window and authorization",
+        "Capture request and identify parameter",
+        "Run low-risk validation first",
+        "Document impact and exact evidence"
+      ],
+      "next": ["xss-testing"],
+      "references": [
+        { "label": "OWASP SQL Injection", "url": "https://owasp.org/www-community/attacks/SQL_Injection" }
+      ]
+    },
+    {
+      "id": "xss-testing",
+      "title": "XSS (Cross-Site Scripting)",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["xss", "injection", "client-side", "A03:2021"],
+      "file": "content/notes/xss-testing.md",
+      "commands": [
+        "dalfox url '<URL>/page?q=test' --blind '<URL>/callback'",
+        "grep -R \"innerHTML\\|document.write\" ./src"
+      ],
+      "checklist": [
+        "Identify reflected or stored input",
+        "Test encoding context",
+        "Confirm exploitability with harmless payload",
+        "Record browser and account role"
+      ],
+      "next": ["sql-injection-testing"],
+      "references": [
+        { "label": "OWASP XSS", "url": "https://owasp.org/www-community/attacks/xss/" }
+      ]
+    },
+    {
+      "id": "api-jwt-review",
+      "title": "JWT Configuration Review",
+      "category": "API",
+      "phase": "Enumeration",
+      "severity": "High",
+      "featured": true,
+      "tags": ["jwt", "auth", "api", "token"],
+      "file": "content/notes/api-jwt-review.md",
+      "commands": [
+        "curl -i -H \"Authorization: Bearer <TOKEN>\" <URL>/api/me",
+        "python3 jwt_tool.py <TOKEN> -C -d <WORDLIST>",
+        "jq -R 'split(\".\") | .[0],.[1] | @base64d | fromjson' token.txt"
+      ],
+      "checklist": [
+        "Collect a valid in-scope token",
+        "Decode header and claims",
+        "Check algorithm and key handling",
+        "Test expiration, audience, and issuer validation",
+        "Document accepted malformed or expired tokens"
+      ],
+      "next": ["api-rate-limit-testing"],
+      "references": [
+        { "label": "OWASP API Security Top 10", "url": "https://owasp.org/API-Security/" },
+        { "label": "JWT Tool", "url": "https://github.com/ticarpi/jwt_tool" }
+      ]
+    },
+    {
+      "id": "api-rate-limit-testing",
+      "title": "API Rate Limit Testing",
+      "category": "API",
+      "phase": "Exploitation",
+      "severity": "Medium",
+      "tags": ["rate-limit", "bruteforce", "api", "abuse-case"],
+      "file": "content/notes/api-rate-limit-testing.md",
+      "commands": [
+        "ffuf -w <WORDLIST> -u <URL>/api/login -X POST -H 'Content-Type: application/json' -d '{\"username\":\"<USER>\",\"password\":\"FUZZ\"}'",
+        "seq 1 50 | xargs -I{} curl -s -o /dev/null -w '%{http_code}\\n' <URL>/api/me"
+      ],
+      "checklist": [
+        "Confirm rate-limit testing is permitted",
+        "Identify login, OTP, reset, or expensive endpoints",
+        "Measure baseline response codes and lockout behavior",
+        "Test account, IP, token, and endpoint level limits",
+        "Record request count, time window, and impact"
+      ],
+      "next": ["api-jwt-review"],
+      "references": [
+        { "label": "OWASP API4 Unrestricted Resource Consumption", "url": "https://owasp.org/API-Security/editions/2023/en/0xa4-unrestricted-resource-consumption/" }
+      ]
+    },
+    {
+      "id": "mobile-apk-static-analysis",
+      "title": "APK Static Analysis",
+      "category": "Mobile",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "featured": true,
+      "tags": ["android", "apk", "static-analysis", "secrets"],
+      "file": "content/notes/mobile-apk-static-analysis.md",
+      "commands": [
+        "apktool d <FILE> -o output/apktool",
+        "jadx -d output/jadx <FILE>",
+        "grep -RniE 'api[_-]?key|secret|token|password|firebase' output/"
+      ],
+      "checklist": [
+        "Confirm app build and package name",
+        "Decompile APK resources and code",
+        "Search for secrets and endpoints",
+        "Review manifest permissions and exported components",
+        "Link findings to dynamic testing notes"
+      ],
+      "next": ["mobile-deeplink-testing"],
+      "references": [
+        { "label": "OWASP MASTG", "url": "https://mas.owasp.org/MASTG/" }
+      ]
+    },
+    {
+      "id": "mobile-deeplink-testing",
+      "title": "Deep Link Testing",
+      "category": "Mobile",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["android", "deeplink", "intent", "auth-bypass"],
+      "file": "content/notes/mobile-deeplink-testing.md",
+      "commands": [
+        "adb shell am start -W -a android.intent.action.VIEW -d '<URL>' <PACKAGE>",
+        "adb shell dumpsys package <PACKAGE> | grep -iE 'scheme|host|intent'",
+        "grep -Rni 'android:scheme\\|android:host\\|intent-filter' output/apktool"
+      ],
+      "checklist": [
+        "Extract schemes, hosts, and paths",
+        "Launch each deep link with controlled parameters",
+        "Check authentication and authorization gates",
+        "Test unsafe redirects or token leakage",
+        "Document activity, URI, and expected role"
+      ],
+      "next": ["mobile-apk-static-analysis"],
+      "references": [
+        { "label": "Android App Links", "url": "https://developer.android.com/training/app-links" }
+      ]
+    },
+    {
+      "id": "cloud-s3-public-exposure",
+      "title": "S3 Public Exposure Review",
+      "category": "Cloud",
+      "phase": "Enumeration",
+      "severity": "High",
+      "featured": true,
+      "tags": ["aws", "s3", "storage", "public-access"],
+      "file": "content/notes/cloud-s3-public-exposure.md",
+      "commands": [
+        "aws s3api get-bucket-policy-status --bucket <BUCKET>",
+        "aws s3api get-public-access-block --bucket <BUCKET>",
+        "aws s3 ls s3://<BUCKET> --no-sign-request"
+      ],
+      "checklist": [
+        "Confirm account and bucket are in scope",
+        "Check public access block settings",
+        "Review bucket policy and ACL exposure",
+        "Attempt anonymous listing only if permitted",
+        "Capture exact bucket, object, and policy evidence"
+      ],
+      "next": ["cloud-iam-privilege-review"],
+      "references": [
+        { "label": "AWS S3 Block Public Access", "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html" }
+      ]
+    },
+    {
+      "id": "cloud-iam-privilege-review",
+      "title": "IAM Privilege Review",
+      "category": "Cloud",
+      "phase": "Post-Exploitation",
+      "severity": "Critical",
+      "tags": ["aws", "iam", "privilege-escalation", "policy"],
+      "file": "content/notes/cloud-iam-privilege-review.md",
+      "commands": [
+        "aws sts get-caller-identity",
+        "aws iam list-attached-user-policies --user-name <USER>",
+        "aws iam simulate-principal-policy --policy-source-arn <ARN> --action-names iam:CreateAccessKey sts:AssumeRole"
+      ],
+      "checklist": [
+        "Identify current principal",
+        "Collect attached and inline policies",
+        "Check assume role paths",
+        "Simulate sensitive permissions",
+        "Document blast radius and least-privilege fix"
+      ],
+      "next": ["cloud-s3-public-exposure"],
+      "references": [
+        { "label": "AWS IAM Policy Simulator", "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies_testing-policies.html" }
+      ]
+    }
+  ]
+}
