@@ -16,7 +16,17 @@
     { "key": "GRAPHQL_PATH", "example": "/graphql" },
     { "key": "OBJECT_ID", "example": "1001" },
     { "key": "ACCOUNT", "example": "storageaccount" },
-    { "key": "CONTAINER", "example": "public" }
+    { "key": "CONTAINER", "example": "public" },
+    { "key": "PORT", "example": "443" },
+    { "key": "SHARE", "example": "public" },
+    { "key": "COMMUNITY", "example": "public" },
+    { "key": "OPENAPI_PATH", "example": "/openapi.json" },
+    { "key": "TENANT", "example": "contoso.onmicrosoft.com" },
+    { "key": "SUBSCRIPTION", "example": "00000000-0000-0000-0000-000000000000" },
+    { "key": "PROJECT", "example": "target-project" },
+    { "key": "REGION", "example": "us-east-1" },
+    { "key": "NAMESPACE", "example": "default" },
+    { "key": "IMAGE", "example": "registry.example/app:latest" }
   ],
   "categories": [
     {
@@ -512,6 +522,808 @@
       "references": [
         { "label": "AWS IMDSv2", "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/configuring-instance-metadata-service.html" },
         { "label": "Azure Instance Metadata Service", "url": "https://learn.microsoft.com/en-us/azure/virtual-machines/instance-metadata-service" }
+      ]
+    },
+    {
+      "id": "ad-ldap-domain-recon",
+      "title": "LDAP Domain Reconnaissance",
+      "category": "AD",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "tags": ["ldap", "recon", "domain", "naming-context"],
+      "file": "content/notes/ad-ldap-domain-recon.md",
+      "commands": [
+        "ldapsearch -x -H ldap://<DC_IP> -s base namingcontexts",
+        "ldapsearch -x -H ldap://<DC_IP> -D '<DOMAIN>\\<USER>' -w '<PASSWORD>' -b 'DC=example,DC=local' '(objectClass=domain)'",
+        "nmap -p 389,636,3268,3269 --script ldap-rootdse <DC_IP>"
+      ],
+      "checklist": [
+        "Confirm LDAP services are in scope",
+        "Collect naming contexts and domain metadata",
+        "Check anonymous bind behavior",
+        "Record domain controllers and LDAP ports",
+        "Send useful context to enumeration notes"
+      ],
+      "next": ["bloodhound-domain-enumeration", "ad-password-spraying"],
+      "references": [
+        { "label": "Nmap ldap-rootdse", "url": "https://nmap.org/nsedoc/scripts/ldap-rootdse.html" }
+      ]
+    },
+    {
+      "id": "ad-password-spraying",
+      "title": "Password Spraying Checks",
+      "category": "AD",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["password-spray", "kerberos", "lockout", "credential-access"],
+      "file": "content/notes/ad-password-spraying.md",
+      "commands": [
+        "kerbrute passwordspray -d <DOMAIN> --dc <DC_IP> <FILE> '<PASSWORD>'",
+        "crackmapexec smb <DC_IP> -d <DOMAIN> -u <FILE> -p '<PASSWORD>' --continue-on-success",
+        "Get-ADDefaultDomainPasswordPolicy"
+      ],
+      "checklist": [
+        "Get explicit approval for password spraying",
+        "Confirm lockout threshold and observation window",
+        "Use one low-risk password per window",
+        "Stop immediately if lockouts appear",
+        "Document successful accounts and control gaps"
+      ],
+      "next": ["bloodhound-domain-enumeration", "kerberoasting-attack"],
+      "references": [
+        { "label": "MITRE T1110.003", "url": "https://attack.mitre.org/techniques/T1110/003/" }
+      ]
+    },
+    {
+      "id": "ad-dcsync-permission-review",
+      "title": "DCSync Permission Review",
+      "category": "AD",
+      "phase": "Post-Exploitation",
+      "severity": "Critical",
+      "tags": ["dcsync", "replication", "privilege", "T1003.006"],
+      "file": "content/notes/ad-dcsync-permission-review.md",
+      "commands": [
+        "secretsdump.py <DOMAIN>/<USER>:<PASSWORD>@<DC_IP> -just-dc-user krbtgt",
+        "Get-ObjectAcl -DistinguishedName 'DC=example,DC=local' -ResolveGUIDs | ? {$_.ObjectAceType -match 'Replication'}",
+        "Get-ADUser <USER> -Properties adminCount,memberOf"
+      ],
+      "checklist": [
+        "Confirm post-exploitation credential testing is in scope",
+        "Identify principals with replication privileges",
+        "Avoid dumping secrets unless explicitly approved",
+        "Validate whether privilege is direct or inherited",
+        "Document privilege path and remediation"
+      ],
+      "next": ["bloodhound-domain-enumeration"],
+      "references": [
+        { "label": "MITRE T1003.006", "url": "https://attack.mitre.org/techniques/T1003/006/" }
+      ]
+    },
+    {
+      "id": "network-smb-enumeration",
+      "title": "SMB Enumeration",
+      "category": "Network",
+      "phase": "Enumeration",
+      "severity": "Info",
+      "featured": true,
+      "tags": ["smb", "shares", "windows", "enumeration"],
+      "file": "content/notes/network-smb-enumeration.md",
+      "commands": [
+        "smbclient -L //<TARGET_IP>/ -N",
+        "smbmap -H <TARGET_IP> -u '<USER>' -p '<PASSWORD>'",
+        "nmap -p445 --script smb-enum-shares,smb-enum-users <TARGET_IP>"
+      ],
+      "checklist": [
+        "Confirm SMB host is in scope",
+        "Try anonymous share listing",
+        "Test scoped credentials when available",
+        "Identify writable shares and sensitive files",
+        "Link exposed credentials to follow-up notes"
+      ],
+      "next": ["network-service-scan", "ad-password-spraying"],
+      "references": [
+        { "label": "Nmap SMB scripts", "url": "https://nmap.org/nsedoc/categories/smb.html" }
+      ]
+    },
+    {
+      "id": "network-dns-enumeration",
+      "title": "DNS Enumeration",
+      "category": "Network",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "tags": ["dns", "zone-transfer", "subdomain", "recon"],
+      "file": "content/notes/network-dns-enumeration.md",
+      "commands": [
+        "dig @<TARGET_IP> <DOMAIN> axfr",
+        "dnsrecon -d <DOMAIN> -n <TARGET_IP>",
+        "nmap -sU -p53 --script dns-recursion,dns-zone-transfer <TARGET_IP>"
+      ],
+      "checklist": [
+        "Identify authoritative DNS servers",
+        "Test zone transfer only against scoped servers",
+        "Check recursion exposure",
+        "Collect hostnames for service scans",
+        "Document records that reveal internal topology"
+      ],
+      "next": ["network-service-scan", "web-content-discovery"],
+      "references": [
+        { "label": "Nmap DNS scripts", "url": "https://nmap.org/nsedoc/categories/dns.html" }
+      ]
+    },
+    {
+      "id": "network-snmp-enumeration",
+      "title": "SNMP Enumeration",
+      "category": "Network",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["snmp", "udp", "community", "enumeration"],
+      "file": "content/notes/network-snmp-enumeration.md",
+      "commands": [
+        "onesixtyone -c <FILE> <TARGET_IP>",
+        "snmpwalk -v2c -c <COMMUNITY> <TARGET_IP>",
+        "nmap -sU -p161 --script snmp-info,snmp-interfaces <TARGET_IP>"
+      ],
+      "checklist": [
+        "Confirm UDP testing is allowed",
+        "Check common community strings",
+        "Walk safe OIDs for system and interface data",
+        "Look for hostnames, routes, users, and services",
+        "Avoid write tests unless explicitly authorized"
+      ],
+      "next": ["network-service-scan"],
+      "references": [
+        { "label": "Nmap SNMP scripts", "url": "https://nmap.org/nsedoc/categories/snmp.html" }
+      ]
+    },
+    {
+      "id": "network-evidence-reporting",
+      "title": "Network Evidence Reporting",
+      "category": "Network",
+      "phase": "Reporting",
+      "severity": "Info",
+      "tags": ["reporting", "evidence", "screenshots", "retest"],
+      "file": "content/notes/network-evidence-reporting.md",
+      "commands": [
+        "mkdir -p evidence/<HOSTNAME>/{screenshots,scans,loot,notes}",
+        "cp scans/<HOSTNAME>* evidence/<HOSTNAME>/scans/",
+        "sha256sum evidence/<HOSTNAME>/scans/* > evidence/<HOSTNAME>/scans/SHA256SUMS"
+      ],
+      "checklist": [
+        "Preserve scan outputs and timestamps",
+        "Capture proof without exposing unnecessary secrets",
+        "Write affected asset, impact, and reproduction steps",
+        "Add remediation and retest notes",
+        "Hash important evidence files"
+      ],
+      "next": [],
+      "references": [
+        { "label": "OWASP Testing Guide Reporting", "url": "https://owasp.org/www-project-web-security-testing-guide/" }
+      ]
+    },
+    {
+      "id": "web-content-discovery",
+      "title": "Content Discovery",
+      "category": "Web",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "featured": true,
+      "tags": ["ffuf", "directories", "content", "recon"],
+      "file": "content/notes/web-content-discovery.md",
+      "commands": [
+        "ffuf -w <WORDLIST> -u <URL>/FUZZ -mc all -fc 404",
+        "feroxbuster -u <URL> -w <WORDLIST> -x php,aspx,js,txt",
+        "curl -i <URL>/robots.txt"
+      ],
+      "checklist": [
+        "Confirm target URL and scope boundaries",
+        "Collect robots.txt and sitemap hints",
+        "Run content discovery with rate limits",
+        "Review interesting status codes manually",
+        "Link discovered endpoints to testing notes"
+      ],
+      "next": ["web-authentication-testing", "sql-injection-testing"],
+      "references": [
+        { "label": "ffuf", "url": "https://github.com/ffuf/ffuf" }
+      ]
+    },
+    {
+      "id": "web-authentication-testing",
+      "title": "Authentication Testing",
+      "category": "Web",
+      "phase": "Enumeration",
+      "severity": "High",
+      "tags": ["auth", "sessions", "login", "access-control"],
+      "file": "content/notes/web-authentication-testing.md",
+      "commands": [
+        "curl -i -c cookies.txt -d 'username=<USER>&password=<PASSWORD>' <URL>/login",
+        "curl -i -b cookies.txt <URL>/account",
+        "ffuf -w <WORDLIST> -u <URL>/login -X POST -d 'username=<USER>&password=FUZZ' -H 'Content-Type: application/x-www-form-urlencoded'"
+      ],
+      "checklist": [
+        "Map login, logout, reset, and registration flows",
+        "Inspect session cookie flags and lifetime",
+        "Test lockout and rate limiting with permission",
+        "Check role transitions and forced browsing",
+        "Document exact account state and evidence"
+      ],
+      "next": ["web-csrf-testing", "api-rate-limit-testing"],
+      "references": [
+        { "label": "OWASP Authentication Testing", "url": "https://owasp.org/www-project-web-security-testing-guide/" }
+      ]
+    },
+    {
+      "id": "web-file-upload-testing",
+      "title": "File Upload Testing",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["upload", "file-handling", "content-type", "storage"],
+      "file": "content/notes/web-file-upload-testing.md",
+      "commands": [
+        "curl -i -F 'file=@<FILE>' <URL>/upload",
+        "exiftool -Comment='upload-test' <FILE>",
+        "file <FILE>"
+      ],
+      "checklist": [
+        "Confirm upload endpoint and allowed file types",
+        "Test extension, MIME, magic bytes, and size controls",
+        "Check where files are stored and served",
+        "Avoid active payloads unless explicitly authorized",
+        "Document validation bypass and impact"
+      ],
+      "next": ["web-ssrf-testing", "xss-testing"],
+      "references": [
+        { "label": "OWASP File Upload Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html" }
+      ]
+    },
+    {
+      "id": "web-ssrf-testing",
+      "title": "SSRF Testing",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "Critical",
+      "tags": ["ssrf", "metadata", "server-side", "cloud"],
+      "file": "content/notes/web-ssrf-testing.md",
+      "commands": [
+        "curl -i '<URL>/fetch?url=http://127.0.0.1:<PORT>/'",
+        "curl -i '<URL>/fetch?url=http://169.254.169.254/'",
+        "python3 -m http.server <PORT>"
+      ],
+      "checklist": [
+        "Identify URL-fetching parameters or integrations",
+        "Use a controlled callback host first",
+        "Test loopback and metadata only when authorized",
+        "Check redirect and DNS rebinding behavior carefully",
+        "Record request origin, destination, and response evidence"
+      ],
+      "next": ["cloud-metadata-service-review"],
+      "references": [
+        { "label": "OWASP SSRF Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html" }
+      ]
+    },
+    {
+      "id": "web-csrf-testing",
+      "title": "CSRF Testing",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "Medium",
+      "tags": ["csrf", "state-change", "cookies", "browser"],
+      "file": "content/notes/web-csrf-testing.md",
+      "commands": [
+        "curl -i -b cookies.txt -X POST <URL>/account/email -d 'email=test@example.com'",
+        "curl -i -b cookies.txt -H 'Origin: https://evil.example' -X POST <URL>/account/email -d 'email=test@example.com'",
+        "grep -Rni 'SameSite\\|csrf\\|xsrf' ./"
+      ],
+      "checklist": [
+        "Identify state-changing requests",
+        "Check CSRF token presence and validation",
+        "Review SameSite cookie behavior",
+        "Test Origin and Referer enforcement",
+        "Document user action required and impact"
+      ],
+      "next": ["web-authentication-testing"],
+      "references": [
+        { "label": "OWASP CSRF Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html" }
+      ]
+    },
+    {
+      "id": "ad-gpp-passwords",
+      "title": "Group Policy Preference Passwords",
+      "category": "AD",
+      "phase": "Enumeration",
+      "severity": "High",
+      "tags": ["gpp", "sysvol", "credentials", "legacy"],
+      "file": "content/notes/ad-gpp-passwords.md",
+      "commands": [
+        "smbclient //<DC_IP>/SYSVOL -U '<DOMAIN>\\<USER>%<PASSWORD>' -c 'recurse; ls Groups.xml'",
+        "Get-GPPPassword.py <DOMAIN>/<USER>:<PASSWORD>@<DC_IP>",
+        "grep -Rni 'cpassword' SYSVOL/"
+      ],
+      "checklist": [
+        "Confirm SYSVOL access is in scope",
+        "Search policy XML for cpassword values",
+        "Validate whether exposed accounts still exist",
+        "Avoid broad password reuse without approval",
+        "Document file path and affected account"
+      ],
+      "next": ["ad-password-spraying", "bloodhound-domain-enumeration"],
+      "references": [
+        { "label": "MS14-025", "url": "https://learn.microsoft.com/en-us/security-updates/securitybulletins/2014/ms14-025" }
+      ]
+    },
+    {
+      "id": "ad-laps-review",
+      "title": "LAPS Permission Review",
+      "category": "AD",
+      "phase": "Post-Exploitation",
+      "severity": "High",
+      "tags": ["laps", "local-admin", "permissions", "windows"],
+      "file": "content/notes/ad-laps-review.md",
+      "commands": [
+        "Get-ADComputer -Filter * -Properties ms-Mcs-AdmPwdExpirationTime",
+        "Get-AdmPwdPassword -ComputerName <HOSTNAME>",
+        "Find-AdmPwdExtendedRights -Identity 'DC=example,DC=local'"
+      ],
+      "checklist": [
+        "Confirm LAPS testing is authorized",
+        "Identify computers managed by LAPS",
+        "Review who can read local admin passwords",
+        "Test read access with least exposure",
+        "Recommend reducing delegated read rights"
+      ],
+      "next": ["ad-dcsync-permission-review"],
+      "references": [
+        { "label": "Microsoft LAPS", "url": "https://learn.microsoft.com/en-us/windows-server/identity/laps/laps-overview" }
+      ]
+    },
+    {
+      "id": "ad-ntlm-relay-checks",
+      "title": "NTLM Relay Checks",
+      "category": "AD",
+      "phase": "Exploitation",
+      "severity": "Critical",
+      "tags": ["ntlm", "relay", "smb-signing", "coercion"],
+      "file": "content/notes/ad-ntlm-relay-checks.md",
+      "commands": [
+        "nmap --script smb2-security-mode -p445 <TARGET_IP>",
+        "crackmapexec smb <TARGET_IP> --gen-relay-list relay-targets.txt",
+        "ntlmrelayx.py -tf relay-targets.txt -smb2support"
+      ],
+      "checklist": [
+        "Confirm relay and coercion testing is in scope",
+        "Identify hosts without required SMB signing",
+        "Choose safe relay targets",
+        "Avoid disruptive coercion methods unless approved",
+        "Document signing state and relay impact"
+      ],
+      "next": ["ad-dcsync-permission-review", "network-smb-enumeration"],
+      "references": [
+        { "label": "MITRE NTLM Relay", "url": "https://attack.mitre.org/techniques/T1557/001/" }
+      ]
+    },
+    {
+      "id": "network-ssl-tls-review",
+      "title": "SSL/TLS Service Review",
+      "category": "Network",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["tls", "certificates", "ciphers", "transport"],
+      "file": "content/notes/network-ssl-tls-review.md",
+      "commands": [
+        "testssl.sh <TARGET_IP>:<PORT>",
+        "nmap --script ssl-enum-ciphers -p <PORT> <TARGET_IP>",
+        "openssl s_client -connect <TARGET_IP>:<PORT> -servername <HOSTNAME>"
+      ],
+      "checklist": [
+        "Identify TLS-enabled services",
+        "Capture certificate chain and hostname mismatch",
+        "Check weak protocols and ciphers",
+        "Review expiry and trust issues",
+        "Document remediation by service owner"
+      ],
+      "next": ["network-service-scan", "web-authentication-testing"],
+      "references": [
+        { "label": "Mozilla TLS Guidelines", "url": "https://wiki.mozilla.org/Security/Server_Side_TLS" }
+      ]
+    },
+    {
+      "id": "network-nfs-enumeration",
+      "title": "NFS Enumeration",
+      "category": "Network",
+      "phase": "Enumeration",
+      "severity": "High",
+      "tags": ["nfs", "exports", "unix", "file-share"],
+      "file": "content/notes/network-nfs-enumeration.md",
+      "commands": [
+        "showmount -e <TARGET_IP>",
+        "nmap -p111,2049 --script nfs-showmount,nfs-ls <TARGET_IP>",
+        "mount -t nfs <TARGET_IP>:/<SHARE> /mnt/nfs -o ro"
+      ],
+      "checklist": [
+        "Confirm NFS hosts are in scope",
+        "List exported paths",
+        "Mount read-only when possible",
+        "Check no_root_squash and sensitive files",
+        "Document export path and access level"
+      ],
+      "next": ["network-service-scan"],
+      "references": [
+        { "label": "Nmap NFS scripts", "url": "https://nmap.org/nsedoc/categories/nfs.html" }
+      ]
+    },
+    {
+      "id": "network-vpn-exposure-review",
+      "title": "VPN Exposure Review",
+      "category": "Network",
+      "phase": "Reconnaissance",
+      "severity": "High",
+      "tags": ["vpn", "remote-access", "mfa", "edge"],
+      "file": "content/notes/network-vpn-exposure-review.md",
+      "commands": [
+        "nmap -sV -p <PORT> <TARGET_IP>",
+        "curl -Ik https://<HOSTNAME>:<PORT>/",
+        "whatweb https://<HOSTNAME>:<PORT>/"
+      ],
+      "checklist": [
+        "Identify internet-facing VPN portals",
+        "Fingerprint product and version carefully",
+        "Check MFA and lockout expectations",
+        "Review certificate and exposed banners",
+        "Escalate outdated versions to patch validation"
+      ],
+      "next": ["network-ssl-tls-review", "network-evidence-reporting"],
+      "references": [
+        { "label": "CISA Known Exploited Vulnerabilities", "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog" }
+      ]
+    },
+    {
+      "id": "web-security-headers-review",
+      "title": "Security Headers Review",
+      "category": "Web",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["headers", "browser-security", "hardening"],
+      "file": "content/notes/web-security-headers-review.md",
+      "commands": [
+        "curl -I <URL>",
+        "nuclei -u <URL> -tags misconfig,headers",
+        "python3 - <<'PY'\nimport requests\nprint(requests.get('<URL>').headers)\nPY"
+      ],
+      "checklist": [
+        "Collect response headers from key pages",
+        "Review CSP, HSTS, X-Frame-Options, and cookie flags",
+        "Check header consistency across redirects",
+        "Avoid treating missing headers as critical without impact",
+        "Document practical exploit path where possible"
+      ],
+      "next": ["xss-testing", "web-authentication-testing"],
+      "references": [
+        { "label": "OWASP Secure Headers", "url": "https://owasp.org/www-project-secure-headers/" }
+      ]
+    },
+    {
+      "id": "web-clickjacking-testing",
+      "title": "Clickjacking Testing",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "Medium",
+      "tags": ["clickjacking", "ui-redress", "headers"],
+      "file": "content/notes/web-clickjacking-testing.md",
+      "commands": [
+        "curl -I <URL> | grep -iE 'x-frame-options|content-security-policy'",
+        "printf '<iframe src=\"<URL>\" width=\"1200\" height=\"800\"></iframe>' > clickjack.html",
+        "python3 -m http.server <PORT>"
+      ],
+      "checklist": [
+        "Identify sensitive authenticated actions",
+        "Check X-Frame-Options and frame-ancestors",
+        "Build harmless frame proof of concept",
+        "Assess whether user action can cause impact",
+        "Document browser and affected workflow"
+      ],
+      "next": ["web-security-headers-review", "web-csrf-testing"],
+      "references": [
+        { "label": "OWASP Clickjacking", "url": "https://owasp.org/www-community/attacks/Clickjacking" }
+      ]
+    },
+    {
+      "id": "web-cache-poisoning",
+      "title": "Web Cache Poisoning",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["cache", "headers", "poisoning", "cdn"],
+      "file": "content/notes/web-cache-poisoning.md",
+      "commands": [
+        "curl -i <URL> -H 'X-Forwarded-Host: attacker.example'",
+        "curl -i <URL> -H 'X-Original-URL: /admin'",
+        "curl -I <URL> | grep -iE 'cache|age|vary|x-cache'"
+      ],
+      "checklist": [
+        "Confirm cache testing is authorized",
+        "Identify cache keys and unkeyed inputs",
+        "Use harmless reflected markers",
+        "Avoid poisoning shared production caches",
+        "Document cache hit behavior and affected users"
+      ],
+      "next": ["web-security-headers-review"],
+      "references": [
+        { "label": "PortSwigger Web Cache Poisoning", "url": "https://portswigger.net/web-security/web-cache-poisoning" }
+      ]
+    },
+    {
+      "id": "web-template-injection",
+      "title": "Server-Side Template Injection",
+      "category": "Web",
+      "phase": "Exploitation",
+      "severity": "Critical",
+      "tags": ["ssti", "template", "rce", "injection"],
+      "file": "content/notes/web-template-injection.md",
+      "commands": [
+        "curl -i '<URL>?q={{7*7}}'",
+        "curl -i '<URL>?q=${7*7}'",
+        "tplmap -u '<URL>?q=test'"
+      ],
+      "checklist": [
+        "Identify reflected template-like inputs",
+        "Start with arithmetic probes",
+        "Fingerprint engine only with safe payloads",
+        "Avoid command execution unless explicitly authorized",
+        "Document engine, input, and impact"
+      ],
+      "next": ["sql-injection-testing", "web-ssrf-testing"],
+      "references": [
+        { "label": "PortSwigger SSTI", "url": "https://portswigger.net/web-security/server-side-template-injection" }
+      ]
+    },
+    {
+      "id": "api-openapi-review",
+      "title": "OpenAPI Specification Review",
+      "category": "API",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "tags": ["openapi", "swagger", "schema", "recon"],
+      "file": "content/notes/api-openapi-review.md",
+      "commands": [
+        "curl -s <URL><OPENAPI_PATH> | jq '.paths | keys'",
+        "nuclei -u <URL> -tags swagger,exposure",
+        "grep -RniE 'swagger|openapi|api-docs' ./"
+      ],
+      "checklist": [
+        "Locate OpenAPI or Swagger documents",
+        "Identify undocumented admin endpoints",
+        "Review auth requirements by path",
+        "Generate endpoint checklist for testing",
+        "Link risky paths to authorization notes"
+      ],
+      "next": ["api-idor-testing", "api-jwt-review"],
+      "references": [
+        { "label": "OWASP API Security", "url": "https://owasp.org/API-Security/" }
+      ]
+    },
+    {
+      "id": "api-mass-assignment",
+      "title": "Mass Assignment Testing",
+      "category": "API",
+      "phase": "Exploitation",
+      "severity": "High",
+      "tags": ["mass-assignment", "api6", "authorization"],
+      "file": "content/notes/api-mass-assignment.md",
+      "commands": [
+        "curl -i -X PATCH -H \"Authorization: Bearer <TOKEN>\" -H 'Content-Type: application/json' <URL>/api/users/<OBJECT_ID> -d '{\"isAdmin\":true}'",
+        "curl -i -X POST -H \"Authorization: Bearer <TOKEN>\" -H 'Content-Type: application/json' <URL>/api/profile -d @<FILE>",
+        "jq '.components.schemas' openapi.json"
+      ],
+      "checklist": [
+        "Compare request body with response object",
+        "Identify server-managed fields",
+        "Attempt harmless unauthorized field changes",
+        "Check create and update endpoints",
+        "Document accepted field and privilege impact"
+      ],
+      "next": ["api-openapi-review", "api-idor-testing"],
+      "references": [
+        { "label": "OWASP API3 Broken Object Property Level Authorization", "url": "https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/" }
+      ]
+    },
+    {
+      "id": "api-cors-review",
+      "title": "CORS Configuration Review",
+      "category": "API",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["cors", "browser", "origin", "api"],
+      "file": "content/notes/api-cors-review.md",
+      "commands": [
+        "curl -i <URL>/api/me -H 'Origin: https://evil.example'",
+        "curl -i <URL>/api/me -H 'Origin: null'",
+        "curl -i -X OPTIONS <URL>/api/me -H 'Origin: https://evil.example' -H 'Access-Control-Request-Method: GET'"
+      ],
+      "checklist": [
+        "Test authenticated and unauthenticated endpoints",
+        "Check reflected origins and wildcard credentials",
+        "Review preflight behavior",
+        "Confirm whether sensitive data is browser-readable",
+        "Document exploitability with cookie/session context"
+      ],
+      "next": ["web-csrf-testing", "api-jwt-review"],
+      "references": [
+        { "label": "OWASP CORS Cheat Sheet", "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Origin_Resource_Sharing_Cheat_Sheet.html" }
+      ]
+    },
+    {
+      "id": "mobile-backup-debug-review",
+      "title": "Backup and Debug Flag Review",
+      "category": "Mobile",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["android", "manifest", "backup", "debuggable"],
+      "file": "content/notes/mobile-backup-debug-review.md",
+      "commands": [
+        "aapt dump badging <FILE>",
+        "grep -RniE 'android:debuggable|android:allowBackup|fullBackupContent' output/apktool/AndroidManifest.xml",
+        "adb backup -f app.ab <PACKAGE>"
+      ],
+      "checklist": [
+        "Decode the Android manifest",
+        "Check debuggable and backup flags",
+        "Review backup rules and exclusions",
+        "Validate risk on the provided build type",
+        "Document sensitive data recoverability"
+      ],
+      "next": ["mobile-apk-static-analysis"],
+      "references": [
+        { "label": "OWASP MASTG Storage", "url": "https://mas.owasp.org/MASTG/tests/android/MASVS-STORAGE/" }
+      ]
+    },
+    {
+      "id": "mobile-local-storage-review",
+      "title": "Local Storage Review",
+      "category": "Mobile",
+      "phase": "Post-Exploitation",
+      "severity": "High",
+      "tags": ["mobile", "storage", "tokens", "sqlite"],
+      "file": "content/notes/mobile-local-storage-review.md",
+      "commands": [
+        "adb shell run-as <PACKAGE> ls -la files shared_prefs databases",
+        "adb shell run-as <PACKAGE> cat shared_prefs/*.xml",
+        "adb shell run-as <PACKAGE> sqlite3 databases/<FILE> '.tables'"
+      ],
+      "checklist": [
+        "Confirm app data extraction is allowed",
+        "Check shared preferences and databases",
+        "Look for tokens, PII, and cached secrets",
+        "Validate encryption and key storage",
+        "Document file path and data sensitivity"
+      ],
+      "next": ["mobile-backup-debug-review", "mobile-tls-pinning-review"],
+      "references": [
+        { "label": "OWASP MASVS Storage", "url": "https://mas.owasp.org/MASVS/controls/MASVS-STORAGE/" }
+      ]
+    },
+    {
+      "id": "mobile-ios-plist-review",
+      "title": "iOS Plist and Entitlement Review",
+      "category": "Mobile",
+      "phase": "Reconnaissance",
+      "severity": "Info",
+      "tags": ["ios", "plist", "entitlements", "static-analysis"],
+      "file": "content/notes/mobile-ios-plist-review.md",
+      "commands": [
+        "plutil -p Payload/*.app/Info.plist",
+        "codesign -d --entitlements :- Payload/*.app",
+        "grep -RniE 'NSAppTransportSecurity|CFBundleURLSchemes|keychain-access-groups' Payload/"
+      ],
+      "checklist": [
+        "Unpack IPA in a clean workspace",
+        "Review URL schemes and transport security",
+        "Inspect entitlements and keychain groups",
+        "Identify risky permissions or debug settings",
+        "Link schemes to deep-link testing"
+      ],
+      "next": ["mobile-deeplink-testing", "mobile-local-storage-review"],
+      "references": [
+        { "label": "Apple Entitlements", "url": "https://developer.apple.com/documentation/bundleresources/entitlements" }
+      ]
+    },
+    {
+      "id": "cloud-security-group-review",
+      "title": "Security Group Exposure Review",
+      "category": "Cloud",
+      "phase": "Enumeration",
+      "severity": "High",
+      "tags": ["aws", "security-groups", "firewall", "exposure"],
+      "file": "content/notes/cloud-security-group-review.md",
+      "commands": [
+        "aws ec2 describe-security-groups --region <REGION>",
+        "aws ec2 describe-network-acls --region <REGION>",
+        "aws ec2 describe-instances --region <REGION> --query 'Reservations[].Instances[].{Id:InstanceId,PublicIp:PublicIpAddress,SG:SecurityGroups[].GroupId}'"
+      ],
+      "checklist": [
+        "Confirm account and region are in scope",
+        "Find public ingress to sensitive ports",
+        "Map rules to attached resources",
+        "Check IPv4 and IPv6 exposure",
+        "Recommend least-privilege ingress"
+      ],
+      "next": ["cloud-iam-privilege-review", "network-service-scan"],
+      "references": [
+        { "label": "AWS Security Groups", "url": "https://docs.aws.amazon.com/vpc/latest/userguide/vpc-security-groups.html" }
+      ]
+    },
+    {
+      "id": "cloud-kubernetes-rbac-review",
+      "title": "Kubernetes RBAC Review",
+      "category": "Cloud",
+      "phase": "Post-Exploitation",
+      "severity": "Critical",
+      "tags": ["kubernetes", "rbac", "cluster", "privilege"],
+      "file": "content/notes/cloud-kubernetes-rbac-review.md",
+      "commands": [
+        "kubectl auth can-i --list -n <NAMESPACE>",
+        "kubectl get rolebindings,clusterrolebindings -A",
+        "kubectl get pods -n <NAMESPACE> -o wide"
+      ],
+      "checklist": [
+        "Confirm cluster context and namespace are in scope",
+        "List effective permissions",
+        "Review bindings to broad roles",
+        "Check pod exec, secret read, and workload creation rights",
+        "Document escalation path and namespace boundary"
+      ],
+      "next": ["cloud-container-image-review"],
+      "references": [
+        { "label": "Kubernetes RBAC", "url": "https://kubernetes.io/docs/reference/access-authn-authz/rbac/" }
+      ]
+    },
+    {
+      "id": "cloud-container-image-review",
+      "title": "Container Image Review",
+      "category": "Cloud",
+      "phase": "Enumeration",
+      "severity": "Medium",
+      "tags": ["container", "image", "secrets", "supply-chain"],
+      "file": "content/notes/cloud-container-image-review.md",
+      "commands": [
+        "trivy image <IMAGE>",
+        "docker history --no-trunc <IMAGE>",
+        "docker run --rm -it --entrypoint sh <IMAGE>"
+      ],
+      "checklist": [
+        "Confirm image and registry are in scope",
+        "Scan for vulnerabilities and secrets",
+        "Review image history and layers",
+        "Check default user and entrypoint",
+        "Document exploitable package or secret evidence"
+      ],
+      "next": ["cloud-kubernetes-rbac-review"],
+      "references": [
+        { "label": "Trivy", "url": "https://github.com/aquasecurity/trivy" }
+      ]
+    },
+    {
+      "id": "cloud-gcp-iam-review",
+      "title": "GCP IAM Review",
+      "category": "Cloud",
+      "phase": "Enumeration",
+      "severity": "High",
+      "tags": ["gcp", "iam", "service-account", "permissions"],
+      "file": "content/notes/cloud-gcp-iam-review.md",
+      "commands": [
+        "gcloud projects get-iam-policy <PROJECT>",
+        "gcloud iam service-accounts list --project <PROJECT>",
+        "gcloud asset search-all-iam-policies --scope=projects/<PROJECT> --query='<USER>'"
+      ],
+      "checklist": [
+        "Confirm project and identity are in scope",
+        "List project IAM bindings",
+        "Identify owner/editor and service account key risks",
+        "Check impersonation permissions",
+        "Document privilege path and least-privilege fix"
+      ],
+      "next": ["cloud-metadata-service-review", "cloud-kubernetes-rbac-review"],
+      "references": [
+        { "label": "GCP IAM", "url": "https://cloud.google.com/iam/docs" }
       ]
     }
   ]
